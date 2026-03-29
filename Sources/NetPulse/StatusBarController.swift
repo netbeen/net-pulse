@@ -88,7 +88,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             for index in 0..<maxCount {
                 let item = self.processItems[index]
                 if index < lines.count {
-                    let attributed = NSAttributedString(string: lines[index], attributes: [.font: self.monoFont])
+                    let color = self.colorForSpeed(lines[index].speed)
+                    let attributed = NSAttributedString(
+                        string: lines[index].text,
+                        attributes: [.font: self.monoFont, .foregroundColor: color]
+                    )
                     item.attributedTitle = attributed
                     item.isHidden = false
                     item.isEnabled = true
@@ -163,7 +167,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     /// 构建对齐后的进程行文本
-    func buildAlignedProcessLines(processes: [ProcessNetworkMonitor.ProcessNetInfo]) -> [String] {
+    func buildAlignedProcessLines(processes: [ProcessNetworkMonitor.ProcessNetInfo]) -> [(text: String, speed: Double)] {
         let namePidList = processes.enumerated().map { index, proc in
             "\(index + 1). \(proc.name) (\(proc.pid))"
         }
@@ -174,11 +178,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let upWidth = upList.map { $0.count }.max() ?? 0
         let downWidth = downList.map { $0.count }.max() ?? 0
 
-        return processes.enumerated().map { index, _ in
+        return processes.enumerated().map { index, proc in
             let name = padRight(namePidList[index], to: nameWidth)
             let up = padRight(upList[index], to: upWidth)
             let down = padRight(downList[index], to: downWidth)
-            return "\(name)  \(up)  \(down)"
+            let text = "\(name)  \(up)  \(down)"
+            let speed = proc.bytesIn + proc.bytesOut
+            return (text: text, speed: speed)
         }
     }
 
@@ -186,5 +192,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     func padRight(_ text: String, to length: Int) -> String {
         let padding = max(0, length - text.count)
         return text + String(repeating: " ", count: padding)
+    }
+
+    func colorForSpeed(_ bytesPerSecond: Double) -> NSColor {
+        if bytesPerSecond < 500_000 {
+            return .secondaryLabelColor
+        }
+        if bytesPerSecond < 1_000_000 {
+            return .systemGreen
+        }
+        if bytesPerSecond < 10_000_000 {
+            return .systemOrange
+        }
+        return .systemRed
     }
 }
