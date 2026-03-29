@@ -11,7 +11,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var lastUp: Double = 0
     private var lastDown: Double = 0
     private var lastProcesses: [ProcessNetworkMonitor.ProcessNetInfo] = []
+    private var headerItem: NSMenuItem?
     private var countdownItem: NSMenuItem?
+    private var processItems: [NSMenuItem] = []
+    private var footerSeparator: NSMenuItem?
+    private var quitItem: NSMenuItem?
     private var isMenuOpen: Bool = false
 
     /// 初始化菜单栏图标与监控器
@@ -23,6 +27,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         super.init()
         statusItem.menu = menu
         menu.delegate = self
+        menu.autoenablesItems = false
+        buildMenuSkeleton()
         startMonitoring()
     }
 
@@ -75,29 +81,59 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     /// 刷新下拉菜单展示进程 Top10
     func updateMenu(processes: [ProcessNetworkMonitor.ProcessNetInfo], secondsRemaining: Int) {
         DispatchQueue.main.async {
-            self.menu.removeAllItems()
-            let header = NSMenuItem(title: "🔝 进程网速 Top 10", action: nil, keyEquivalent: "")
-            header.isEnabled = false
-            self.menu.addItem(header)
-            let countdown = NSMenuItem(title: "下次刷新：\(secondsRemaining) 秒", action: nil, keyEquivalent: "")
-            countdown.isEnabled = false
-            self.menu.addItem(countdown)
-            self.countdownItem = countdown
-            self.menu.addItem(.separator())
-
-            for (index, proc) in processes.enumerated() {
-                let upStr = self.formatSpeed(proc.bytesOut)
-                let downStr = self.formatSpeed(proc.bytesIn)
-                let label = "\(index + 1). \(proc.name) (\(proc.pid))  ↑\(upStr) ↓\(downStr)"
-                self.menu.addItem(NSMenuItem(title: label, action: nil, keyEquivalent: ""))
+            self.countdownItem?.title = "下次刷新：\(secondsRemaining) 秒"
+            let maxCount = self.processItems.count
+            for index in 0..<maxCount {
+                if index < processes.count {
+                    let proc = processes[index]
+                    let upStr = self.formatSpeed(proc.bytesOut)
+                    let downStr = self.formatSpeed(proc.bytesIn)
+                    let label = "\(index + 1). \(proc.name) (\(proc.pid))  ↑\(upStr) ↓\(downStr)"
+                    let item = self.processItems[index]
+                    item.title = label
+                    item.isHidden = false
+                    item.isEnabled = true
+                } else {
+                    let item = self.processItems[index]
+                    item.title = ""
+                    item.isHidden = true
+                    item.isEnabled = false
+                }
             }
-
-            self.menu.addItem(.separator())
-            let quit = NSMenuItem(title: "退出 NetPulse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-            self.menu.addItem(quit)
         }
     }
 
+    /// 初始化菜单结构并创建占位项
+    func buildMenuSkeleton() {
+        menu.removeAllItems()
+        let header = NSMenuItem(title: "🔝 进程网速 Top 10", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        headerItem = header
+
+        let countdown = NSMenuItem(title: "下次刷新：\(refreshInterval) 秒", action: nil, keyEquivalent: "")
+        countdown.isEnabled = false
+        menu.addItem(countdown)
+        countdownItem = countdown
+
+        menu.addItem(.separator())
+
+        processItems = (0..<10).map { _ in
+            let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            item.isEnabled = true
+            item.isHidden = true
+            menu.addItem(item)
+            return item
+        }
+
+        let footer = NSMenuItem.separator()
+        menu.addItem(footer)
+        footerSeparator = footer
+
+        let quit = NSMenuItem(title: "退出 NetPulse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quit)
+        quitItem = quit
+    }
     /// 只更新倒计时文案以支持菜单动态刷新
     func updateCountdown(secondsRemaining: Int) {
         DispatchQueue.main.async {
