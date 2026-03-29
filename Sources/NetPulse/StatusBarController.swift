@@ -238,7 +238,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let apps = map.map { name, entry in
             AppNetInfo(name: name, bytesIn: entry.bytesIn, bytesOut: entry.bytesOut, processes: entry.processes)
         }
-        return apps.sorted { $0.total() > $1.total() }.prefix(20).map { $0 }
+        let filtered = apps.filter { $0.total() > 0 }
+        return filtered.sorted { $0.total() > $1.total() }.prefix(20).map { $0 }
     }
 
     /// 将进程名称归一化到应用名称（聚合使用）
