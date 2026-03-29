@@ -21,12 +21,15 @@ final class StatusBarController {
     func startMonitoring() {
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            let speed = self.netMonitor.getSpeed()
-            self.updateTitle(up: speed.up, down: speed.down)
-
             DispatchQueue.global(qos: .background).async {
-                self.procMonitor.fetchTop10 { processes in
-                    self.updateMenu(processes: processes)
+                self.procMonitor.fetchTop10 { sample in
+                    if sample.totalIn > 0 || sample.totalOut > 0 {
+                        self.updateTitle(up: sample.totalOut, down: sample.totalIn)
+                    } else {
+                        let speed = self.netMonitor.getSpeed()
+                        self.updateTitle(up: speed.up, down: speed.down)
+                    }
+                    self.updateMenu(processes: sample.top)
                 }
             }
         }

@@ -1,6 +1,12 @@
 import Foundation
 
 final class ProcessNetworkMonitor {
+    struct ProcessSample {
+        let top: [ProcessNetInfo]
+        let totalIn: Double
+        let totalOut: Double
+    }
+
     struct ProcessNetInfo {
         let pid: Int
         let name: String
@@ -14,10 +20,10 @@ final class ProcessNetworkMonitor {
     }
 
     /// 异步获取进程网速 Top10
-    func fetchTop10(completion: @escaping ([ProcessNetInfo]) -> Void) {
+    func fetchTop10(completion: @escaping (ProcessSample) -> Void) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        task.arguments = ["-P", "-x", "-s", "1", "-L", "1", "-J", "bytes_in,bytes_out"]
+        task.arguments = ["-P", "-x", "-d", "-s", "1", "-L", "1", "-J", "bytes_in,bytes_out"]
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -33,34 +39,42 @@ final class ProcessNetworkMonitor {
         do {
             try task.run()
         } catch {
-            completion([])
+            completion(ProcessSample(top: [], totalIn: 0, totalOut: 0))
         }
     }
 
-    /// 解析 nettop 输出并按总流量排序取前十
-    func parseNettop(_ output: String) -> [ProcessNetInfo] {
+    func parseNettop(_ output: String) -> ProcessSample {
         let lines = output.split(separator: "\n")
         var results: [ProcessNetInfo] = []
+        var totalIn: Double = 0
+        var totalOut: Double = 0
 
         for line in lines {
-            let cols = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            let cols = splitCSVLine(String(line))
             guard cols.count >= 3 else { continue }
 
-            let namePid = String(cols[0])
+            let namePid = cols[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !namePid.isEmpty else { continue }
             guard let dotIndex = namePid.lastIndex(of: ".") else { continue }
             let name = String(namePid[..<dotIndex])
             let pidPart = String(namePid[namePid.index(after: dotIndex)...])
             guard let pid = Int(pidPart) else { continue }
 
-            let bytesIn = parseNumber(String(cols[1]))
-            let bytesOut = parseNumber(String(cols[2]))
+            let bytesIn = parseNumber(cols[1])
+            let bytesOut = parseNumber(cols[2])
             results.append(ProcessNetInfo(pid: pid, name: name, bytesIn: bytesIn, bytesOut: bytesOut))
+            totalIn += bytesIn
+            totalOut += bytesOut
         }
 
-        return results.sorted { $0.total() > $1.total() }.prefix(10).map { $0 }
+        let top = results.sorted { $0.total() > $1.total() }.prefix(10).map { $0 }
+        return ProcessSample(top: top, totalIn: totalIn, totalOut: totalOut)
     }
 
-    /// 解析带分隔符的数字字符串
+    func splitCSVLine(_ line: String) -> [String] {
+        line.split(separator: ",", omittingEmptySubsequences: false).map { String($0) }
+    }
+
     func parseNumber(_ text: String) -> Double {
         let cleaned = text.replacingOccurrences(of: ",", with: "")
         return Double(cleaned) ?? 0
