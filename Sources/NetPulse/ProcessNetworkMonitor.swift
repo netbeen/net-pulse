@@ -23,7 +23,7 @@ final class ProcessNetworkMonitor {
     func fetchTop10(completion: @escaping (ProcessSample) -> Void) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        task.arguments = ["-P", "-x", "-d", "-s", "1", "-L", "1", "-J", "bytes_in,bytes_out"]
+        task.arguments = ["-P", "-x", "-d", "-t", "external", "-s", "1", "-L", "1", "-J", "bytes_in,bytes_out"]
 
         let pipe = Pipe()
         task.standardOutput = pipe
