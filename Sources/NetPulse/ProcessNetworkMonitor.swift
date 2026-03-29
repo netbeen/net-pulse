@@ -1,8 +1,13 @@
 import Foundation
 
 final class ProcessNetworkMonitor {
+    enum InterfaceType {
+        case external
+        case all
+    }
+
     struct ProcessSample {
-        let top: [ProcessNetInfo]
+        let processes: [ProcessNetInfo]
         let totalIn: Double
         let totalOut: Double
     }
@@ -19,11 +24,11 @@ final class ProcessNetworkMonitor {
         }
     }
 
-    /// 异步获取进程网速 Top10
-    func fetchTop10(completion: @escaping (ProcessSample) -> Void) {
+    /// 异步获取进程网速采样结果
+    func fetchSample(interfaceType: InterfaceType, completion: @escaping (ProcessSample) -> Void) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        task.arguments = ["-P", "-x", "-d", "-t", "external", "-s", "1", "-L", "1", "-J", "bytes_in,bytes_out"]
+        task.arguments = buildArguments(interfaceType: interfaceType)
 
         let pipe = Pipe()
         task.standardOutput = pipe
@@ -39,10 +44,11 @@ final class ProcessNetworkMonitor {
         do {
             try task.run()
         } catch {
-            completion(ProcessSample(top: [], totalIn: 0, totalOut: 0))
+            completion(ProcessSample(processes: [], totalIn: 0, totalOut: 0))
         }
     }
 
+    /// 解析 nettop 输出为进程采样数据
     func parseNettop(_ output: String) -> ProcessSample {
         let lines = output.split(separator: "\n")
         var results: [ProcessNetInfo] = []
@@ -67,16 +73,26 @@ final class ProcessNetworkMonitor {
             totalOut += bytesOut
         }
 
-        let top = results.sorted { $0.total() > $1.total() }.prefix(10).map { $0 }
-        return ProcessSample(top: top, totalIn: totalIn, totalOut: totalOut)
+        return ProcessSample(processes: results, totalIn: totalIn, totalOut: totalOut)
     }
 
+    /// 将 nettop CSV 行按逗号切分
     func splitCSVLine(_ line: String) -> [String] {
         line.split(separator: ",", omittingEmptySubsequences: false).map { String($0) }
     }
 
+    /// 解析带分隔符的数字字符串
     func parseNumber(_ text: String) -> Double {
         let cleaned = text.replacingOccurrences(of: ",", with: "")
         return Double(cleaned) ?? 0
+    }
+
+    /// 构建 nettop 命令参数
+    func buildArguments(interfaceType: InterfaceType) -> [String] {
+        var args = ["-P", "-x", "-d", "-s", "1", "-L", "1", "-J", "bytes_in,bytes_out"]
+        if interfaceType == .external {
+            args.insert(contentsOf: ["-t", "external"], at: 3)
+        }
+        return args
     }
 }
