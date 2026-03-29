@@ -17,6 +17,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var footerSeparator: NSMenuItem?
     private var quitItem: NSMenuItem?
     private var isMenuOpen: Bool = false
+    private let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
     /// 初始化菜单栏图标与监控器
     override init() {
@@ -82,19 +83,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     func updateMenu(processes: [ProcessNetworkMonitor.ProcessNetInfo], secondsRemaining: Int) {
         DispatchQueue.main.async {
             self.countdownItem?.title = "下次刷新：\(secondsRemaining) 秒"
+            let lines = self.buildAlignedProcessLines(processes: processes)
             let maxCount = self.processItems.count
             for index in 0..<maxCount {
-                if index < processes.count {
-                    let proc = processes[index]
-                    let upStr = self.formatSpeed(proc.bytesOut)
-                    let downStr = self.formatSpeed(proc.bytesIn)
-                    let label = "\(index + 1). \(proc.name) (\(proc.pid))  ↑\(upStr) ↓\(downStr)"
-                    let item = self.processItems[index]
-                    item.title = label
+                let item = self.processItems[index]
+                if index < lines.count {
+                    let attributed = NSAttributedString(string: lines[index], attributes: [.font: self.monoFont])
+                    item.attributedTitle = attributed
                     item.isHidden = false
                     item.isEnabled = true
                 } else {
-                    let item = self.processItems[index]
                     item.title = ""
                     item.isHidden = true
                     item.isEnabled = false
@@ -162,5 +160,31 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             return String(format: "%.0fKB/s", bytes / 1_000)
         }
         return String(format: "%.0fB/s", bytes)
+    }
+
+    /// 构建对齐后的进程行文本
+    func buildAlignedProcessLines(processes: [ProcessNetworkMonitor.ProcessNetInfo]) -> [String] {
+        let namePidList = processes.enumerated().map { index, proc in
+            "\(index + 1). \(proc.name) (\(proc.pid))"
+        }
+        let upList = processes.map { "↑\(formatSpeed($0.bytesOut))" }
+        let downList = processes.map { "↓\(formatSpeed($0.bytesIn))" }
+
+        let nameWidth = namePidList.map { $0.count }.max() ?? 0
+        let upWidth = upList.map { $0.count }.max() ?? 0
+        let downWidth = downList.map { $0.count }.max() ?? 0
+
+        return processes.enumerated().map { index, _ in
+            let name = padRight(namePidList[index], to: nameWidth)
+            let up = padRight(upList[index], to: upWidth)
+            let down = padRight(downList[index], to: downWidth)
+            return "\(name)  \(up)  \(down)"
+        }
+    }
+
+    /// 右侧补空格以实现等宽对齐
+    func padRight(_ text: String, to length: Int) -> String {
+        let padding = max(0, length - text.count)
+        return text + String(repeating: " ", count: padding)
     }
 }
